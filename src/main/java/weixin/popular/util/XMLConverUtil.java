@@ -20,6 +20,9 @@ import javax.xml.bind.Unmarshaller;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
 
 import org.w3c.dom.DOMException;
 import org.w3c.dom.Document;
@@ -102,8 +105,15 @@ public class XMLConverUtil{
 				Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
 				uMap.put(clazz, unmarshaller);
 			}
-			return (T) uMap.get(clazz).unmarshal(reader);
+			//XXE漏洞修复
+			XMLInputFactory xif = XMLInputFactory.newFactory();
+			xif.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+			xif.setProperty(XMLInputFactory.SUPPORT_DTD, true);
+			XMLStreamReader xsr = xif.createXMLStreamReader(reader);
+			return (T) uMap.get(clazz).unmarshal(xsr);
 		} catch (JAXBException e) {
+			e.printStackTrace();
+		} catch (XMLStreamException e) {
 			e.printStackTrace();
 		}
 		return null;
@@ -148,8 +158,20 @@ public class XMLConverUtil{
 		try {
 			DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
 			//XXE漏洞修复
-			dbf.setExpandEntityReferences(false);
-			dbf.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+			String FEATURE = null;
+			try {
+				FEATURE = "http://apache.org/xml/features/disallow-doctype-decl";
+				dbf.setFeature(FEATURE, true);
+				FEATURE = "http://xml.org/sax/features/external-general-entities";
+				dbf.setFeature(FEATURE, false);
+				FEATURE = "http://xml.org/sax/features/external-parameter-entities";
+				dbf.setFeature(FEATURE, false);
+				FEATURE = "http://apache.org/xml/features/nonvalidating/load-external-dtd";
+				dbf.setFeature(FEATURE, false);
+				dbf.setXIncludeAware(false);
+				dbf.setExpandEntityReferences(false);
+			} catch (ParserConfigurationException e) {
+			}
 
 			DocumentBuilder db = dbf.newDocumentBuilder();
 			StringReader sr = new StringReader(xml);
